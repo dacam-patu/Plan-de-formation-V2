@@ -48,6 +48,7 @@ select:focus,input:focus,textarea:focus{outline:2px solid var(--brand-soft);bord
 .logo{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--brand),#7c73 f5);
   display:grid;place-items:center;color:#fff;font-size:17px;box-shadow:var(--shadow)}
 .logo{background:linear-gradient(135deg,#4f46e5,#8b5cf6)}
+.brand-logo{height:38px;width:auto;max-width:190px;object-fit:contain;border-radius:6px;display:block}
 .spacer{flex:1}
 .plan-picker{display:flex;align-items:center;gap:6px}
 .plan-picker select{width:auto;min-width:210px;font-weight:600}
@@ -1012,7 +1013,12 @@ function openAdminPanel(){
 }
 
 /* ---- Logo partagé (écran de connexion), géré par l'admin ---- */
-function applyLogo(src){ if(!src) return; const el=document.querySelector('#authScreen .logo-lg-img'); if(el) el.src=src; }
+function applyLogo(src){ if(!src) return;
+  const el=document.querySelector('#authScreen .logo-lg-img'); if(el) el.src=src;
+  const tb=$("#brandLogo"); if(tb) tb.src=src;
+}
+/* recopie le logo par défaut (intégré dans l'écran de connexion) vers la barre du haut */
+function initBrandLogo(){ const def=document.querySelector('#authScreen .logo-lg-img'); const tb=$("#brandLogo"); if(def&&tb&&!tb.src) tb.src=def.src; }
 async function loadSharedLogo(){
   try{ const {data}=await sb.from('app_settings').select('logo').eq('id',1).maybeSingle(); if(data&&data.logo) applyLogo(data.logo); }catch(e){}
 }
@@ -1753,7 +1759,8 @@ async function boot(){
   sb=supabase.createClient(window.SB_URL, window.SB_KEY);
   wireAuth();
   setAuthMode("signin");
-  loadSharedLogo();   // logo partagé (lecture publique) pour l'écran de connexion
+  initBrandLogo();    // logo par défaut dans la barre du haut
+  loadSharedLogo();   // logo partagé (lecture publique) → connexion + barre du haut
   try{
     const {data:{session}}=await sb.auth.getSession();
     if(session) await afterLogin(session); else showAuth();

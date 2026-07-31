@@ -1409,14 +1409,29 @@ function printPlan(){
       `<div class="ph-sub">${esc(y.label)} · édité le ${new Date().toLocaleDateString("fr-FR")}</div></div>`+
     `</div>`;
   const grid=$("#grid");
-  const gw=grid.scrollWidth, gh=grid.scrollHeight;
   // Surface imprimable A3 paysage à 96 dpi (≈ 1587×1122 px), marges 6 mm (~23 px),
-  // moins la hauteur réservée à l'en-tête (logo + titre ≈ 70 px).
+  // moins la hauteur réservée à l'en-tête (logo + titre ≈ 74 px).
   const PW = 1587 - 46, PH = 1122 - 46 - 74;
-  let scale=Math.min(PW/gw, PH/gh)*0.97;        // marge de sécurité → tient sur 1 page
-  scale=Math.max(0.10, Math.min(scale, 1.8));   // bornes raisonnables
+  const labelW=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--label-w"))||240;
+  const N=y.weeks.length;
+  const savedCols=grid.style.gridTemplateColumns;
+  // Recherche de la largeur de colonne qui MAXIMISE la taille du tableau sur la page
+  // (élargir les colonnes réduit le retour à la ligne → meilleur remplissage largeur ET hauteur).
+  let best={scale:0, cw:56};
+  for(let c=44; c<=240; c+=10){
+    grid.style.gridTemplateColumns=`${labelW}px repeat(${N}, ${c}px)`;
+    const gw=grid.scrollWidth, gh=grid.scrollHeight;
+    const s=Math.min(PW/gw, PH/gh);
+    if(s>best.scale) best={scale:s, cw:c};
+  }
+  grid.style.gridTemplateColumns=`${labelW}px repeat(${N}, ${best.cw}px)`;
+  let scale=Math.max(0.10, Math.min(best.scale*0.98, 1.8));
   document.documentElement.style.setProperty("--print-scale", scale);
-  const cleanup=()=>{ document.documentElement.style.removeProperty("--print-scale"); $("#printHead").innerHTML=""; window.removeEventListener("afterprint",cleanup); };
+  const cleanup=()=>{
+    document.documentElement.style.removeProperty("--print-scale");
+    grid.style.gridTemplateColumns=savedCols; $("#printHead").innerHTML="";
+    window.removeEventListener("afterprint",cleanup); render();
+  };
   window.addEventListener("afterprint",cleanup);
   setTimeout(()=>window.print(), 80);
 }

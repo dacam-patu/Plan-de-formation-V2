@@ -206,12 +206,15 @@ kbd{background:#f1f5f9;border:1px solid var(--line);border-bottom-width:2px;bord
   /* désactive le collage (sticky) : en-têtes et libellés en position normale */
   .corner,.hd,.rowlab{position:static!important}
   /* cadrer tout le tableau sur UNE page : mise à l'échelle calculée avant impression */
-  .grid{ zoom:var(--print-scale,1); box-shadow:none!important; page-break-inside:avoid; break-inside:avoid; }
+  .grid{ zoom:var(--print-scale,1); box-shadow:none!important; page-break-inside:avoid; break-inside:avoid;
+         border:var(--print-frame,3px) solid #1e293b; }   /* encadrement trait fort */
   .act,.band{ box-shadow:none!important; }
   /* conserver les couleurs à l'impression */
   *{ -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
   /* en-tête pro (papier à en-tête établissement) */
   #printHead{ display:block!important; margin:0 0 4mm; padding-bottom:2.5mm; border-bottom:2.5px solid #4338ca }
+  #printHead .ph-main{ text-align:center; font-size:26px; font-weight:800; letter-spacing:.10em;
+    text-transform:uppercase; color:#4338ca; margin-bottom:6px }
   #printHead .ph-row{ display:flex; align-items:center; gap:14px }
   #printHead .ph-logo{ height:52px; width:auto; max-width:210px; object-fit:contain }
   #printHead .ph-txt{ flex:1 }
@@ -1403,6 +1406,7 @@ function printPlan(){
   const y=plan.years[activeYear];
   const logo=($("#brandLogo")&&$("#brandLogo").src) || (document.querySelector('#authScreen .logo-lg-img')||{}).src || "";
   $("#printHead").innerHTML =
+    `<div class="ph-main">PLAN DE FORMATION</div>`+
     `<div class="ph-row">`+
       (logo?`<img class="ph-logo" src="${logo}">`:``)+
       `<div class="ph-txt"><div class="ph-title">${esc(plan.name)}</div>`+
@@ -1410,8 +1414,8 @@ function printPlan(){
     `</div>`;
   const grid=$("#grid");
   // Surface imprimable A3 paysage à 96 dpi (≈ 1587×1122 px), marges 6 mm (~23 px),
-  // moins la hauteur réservée à l'en-tête (logo + titre ≈ 74 px).
-  const PW = 1587 - 46, PH = 1122 - 46 - 74;
+  // moins la hauteur réservée à l'en-tête (titre + logo ≈ 108 px).
+  const PW = 1587 - 46, PH = 1122 - 46 - 108;
   const labelW=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--label-w"))||240;
   const N=y.weeks.length;
   const savedCols=grid.style.gridTemplateColumns;
@@ -1427,8 +1431,11 @@ function printPlan(){
   grid.style.gridTemplateColumns=`${labelW}px repeat(${N}, ${best.cw}px)`;
   let scale=Math.max(0.10, Math.min(best.scale*0.98, 1.8));
   document.documentElement.style.setProperty("--print-scale", scale);
+  // cadre "trait fort" : épaisseur constante (~3 px) une fois la mise à l'échelle appliquée
+  document.documentElement.style.setProperty("--print-frame", (3/scale)+"px");
   const cleanup=()=>{
     document.documentElement.style.removeProperty("--print-scale");
+    document.documentElement.style.removeProperty("--print-frame");
     grid.style.gridTemplateColumns=savedCols; $("#printHead").innerHTML="";
     window.removeEventListener("afterprint",cleanup); render();
   };

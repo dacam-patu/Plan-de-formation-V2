@@ -198,22 +198,25 @@ kbd{background:#f1f5f9;border:1px solid var(--line);border-bottom-width:2px;bord
 /* ---------- Impression (A3 paysage, tout le tableau sur une page) ---------- */
 #printHead{display:none}
 @media print{
-  @page{ size:A3 landscape; margin:8mm; }
-  .topbar,.subbar,.drawer,.overlay,.toast,.menu,.modal,.rowlab .rowmenu,.colgrip,.rowgrip{display:none!important}
+  @page{ size:A3 landscape; margin:6mm; }
+  .topbar,.subbar,.drawer,.overlay,.toast,.menu,.modal,#authScreen,.rowlab .rowmenu,.colgrip,.rowgrip{display:none!important}
   html,body{overflow:visible!important;height:auto!important;background:#fff!important}
   #app{height:auto!important;display:block!important}
-  .scroll{overflow:visible!important;height:auto!important}
+  .scroll{overflow:hidden!important;height:auto!important}
   /* désactive le collage (sticky) : en-têtes et libellés en position normale */
   .corner,.hd,.rowlab{position:static!important}
-  /* cadrer tout le tableau : mise à l'échelle calculée avant impression */
-  .grid{ zoom:var(--print-scale,1); box-shadow:none!important; }
+  /* cadrer tout le tableau sur UNE page : mise à l'échelle calculée avant impression */
+  .grid{ zoom:var(--print-scale,1); box-shadow:none!important; page-break-inside:avoid; break-inside:avoid; }
   .act,.band{ box-shadow:none!important; }
   /* conserver les couleurs à l'impression */
   *{ -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
-  /* titre pro en haut de page */
-  #printHead{ display:block!important; margin:0 0 5mm; padding-bottom:3mm; border-bottom:2px solid #4338ca }
-  #printHead .ph-title{ font-size:19px; font-weight:800; color:#1e293b }
-  #printHead .ph-sub{ font-size:12px; color:#64748b; margin-top:2px }
+  /* en-tête pro (papier à en-tête établissement) */
+  #printHead{ display:block!important; margin:0 0 4mm; padding-bottom:2.5mm; border-bottom:2.5px solid #4338ca }
+  #printHead .ph-row{ display:flex; align-items:center; gap:14px }
+  #printHead .ph-logo{ height:52px; width:auto; max-width:210px; object-fit:contain }
+  #printHead .ph-txt{ flex:1 }
+  #printHead .ph-title{ font-size:20px; font-weight:800; color:#1e293b; line-height:1.15 }
+  #printHead .ph-sub{ font-size:12px; color:#64748b; margin-top:3px }
 }
 
 /* ---------- Authentification ---------- */
@@ -1398,19 +1401,24 @@ function download(name,content,type){
 function printPlan(){
   if(!plan){ toast("Aucun plan à imprimer."); return; }
   const y=plan.years[activeYear];
+  const logo=($("#brandLogo")&&$("#brandLogo").src) || (document.querySelector('#authScreen .logo-lg-img')||{}).src || "";
   $("#printHead").innerHTML =
-    `<div class="ph-title">${esc(plan.name)}</div>`+
-    `<div class="ph-sub">${esc(y.label)} — édité le ${new Date().toLocaleDateString("fr-FR")}</div>`;
+    `<div class="ph-row">`+
+      (logo?`<img class="ph-logo" src="${logo}">`:``)+
+      `<div class="ph-txt"><div class="ph-title">${esc(plan.name)}</div>`+
+      `<div class="ph-sub">${esc(y.label)} · édité le ${new Date().toLocaleDateString("fr-FR")}</div></div>`+
+    `</div>`;
   const grid=$("#grid");
   const gw=grid.scrollWidth, gh=grid.scrollHeight;
-  // surface imprimable A3 paysage à 96 dpi, marges 8 mm (≈ 1527 × 1062 px), moins l'entête
-  const PW=1527, PH=1062-70;
-  let scale=Math.min(PW/gw, PH/gh)*0.98;      // marge de sécurité
-  scale=Math.max(0.12, Math.min(scale, 1.6)); // pas de mise à l'échelle extrême
+  // Surface imprimable A3 paysage à 96 dpi (≈ 1587×1122 px), marges 6 mm (~23 px),
+  // moins la hauteur réservée à l'en-tête (logo + titre ≈ 70 px).
+  const PW = 1587 - 46, PH = 1122 - 46 - 74;
+  let scale=Math.min(PW/gw, PH/gh)*0.97;        // marge de sécurité → tient sur 1 page
+  scale=Math.max(0.10, Math.min(scale, 1.8));   // bornes raisonnables
   document.documentElement.style.setProperty("--print-scale", scale);
   const cleanup=()=>{ document.documentElement.style.removeProperty("--print-scale"); $("#printHead").innerHTML=""; window.removeEventListener("afterprint",cleanup); };
   window.addEventListener("afterprint",cleanup);
-  setTimeout(()=>window.print(), 60);
+  setTimeout(()=>window.print(), 80);
 }
 function exportJSON(){ download(safe(plan.name)+".json", JSON.stringify(plan,null,1), "application/json"); }
 function exportAllJSON(){ download("plans-formation.json", JSON.stringify(DB,null,1), "application/json"); }

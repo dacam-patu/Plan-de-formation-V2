@@ -269,6 +269,16 @@ function normalizePlan(p){
   p.years.forEach((y,yi)=>{
     // année de rentrée : sert aux dates réelles et au retrait des vacances
     if(!y.startYear){ const sy=inferStartYear(p,y,yi); if(sy) y.startYear=sy; }
+    /* Découpage par mois recalculé sur la règle « majorité de jours de classe »
+       dès que la date de la colonne est connue, pour que les plans anciens et
+       les nouveaux soient regroupés de la même façon. Le contenu des cases
+       n'est pas touché : seuls les en-têtes de mois peuvent changer. */
+    const datesY=weekDatesFor(y, y.startYear);
+    y.weeks.forEach(w=>{
+      const iso=datesY.get(w); if(!iso) return;
+      if(!w.d) w.d=iso;
+      w.month=MONTHS_FR[moisDeLaSemaine(new Date(iso+"T00:00:00"))];
+    });
     y.rows.forEach((r,ri)=>{
       r.id = r.id || uid();
       r.color = r.color || PALETTE[ri % PALETTE.length];
@@ -1308,12 +1318,28 @@ function generateSchoolYearWeeks(sy){
   const end=new Date(sy+1,6,13);             // ~13 juillet suivant
   const weeks=[];
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+7)){
-    const thu=new Date(d); thu.setDate(thu.getDate()+3);  // jeudi (mois représentatif)
-    const m=thu.getMonth();
+    const m=moisDeLaSemaine(d);
     // d = date du lundi, conservée pour les info-bulles et le repérage réel
     weeks.push({ week:String(isoWeekNum(d)), month:MONTHS_FR[m], semester:(m>=1&&m<=6)?2:1, d:ymd(d) });
   }
   return weeks;
+}
+/* Mois d'une colonne : celui où tombe la MAJORITÉ des JOURS DE CLASSE
+   (lundi → vendredi), et non celui du jeudi comme le veut la convention ISO.
+   Une semaine à cheval — 3 jours d'un mois, 2 de l'autre — est ainsi rangée
+   dans le mois où l'enseignement a réellement lieu. Exemple : la semaine du
+   lundi 28 septembre 2026 compte 3 jours de classe en septembre et 2 en
+   octobre, elle appartient donc à septembre.
+   Sur 5 jours consécutifs l'égalité est impossible : le résultat est unique. */
+function moisDeLaSemaine(lundi){
+  const ordre=[], n={};
+  for(let i=0;i<5;i++){
+    const d=new Date(lundi); d.setDate(d.getDate()+i);
+    const m=d.getMonth();
+    if(!(m in n)){ n[m]=0; ordre.push(m); }
+    n[m]++;
+  }
+  return ordre.reduce((a,b)=> n[b]>n[a] ? b : a);
 }
 const ymd=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 

@@ -44,6 +44,11 @@ Plan de formation V2/
 - **Édition en place** : double-clic sur un intitulé de ligne pour le renommer ; clic sur une case (mode édition) pour modifier son contenu.
 - **Glisser-créer** : en mode édition, glisser sur des cases vides pour créer une activité sur une plage de semaines.
 - Gestion des lignes (ajouter, renommer, monter/descendre, supprimer, couleur par défaut).
+- **Regroupement par mois au plus juste** : une semaine à cheval sur deux mois est rangée dans celui
+  où tombe la majorité de ses **jours de classe** (lundi → vendredi), et non dans celui de son jeudi
+  (convention ISO). La semaine du lundi 28 septembre 2026, qui compte 3 jours de classe en septembre
+  et 2 en octobre, appartient donc à septembre. Les mois sont recalculés au chargement de chaque plan
+  dont l'année de rentrée est connue — ce qui corrige aussi les plans saisis à la main.
 - **Dates réelles en info-bulle** : survoler un numéro de semaine affiche la période exacte
   (« Semaine 42 — du lundi 14 octobre au dimanche 20 octobre 2024 »). La date se déduit de l'année
   de rentrée du plan ; pour les plans anciens elle est retrouvée dans le libellé de l'année ou dans

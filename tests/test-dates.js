@@ -81,5 +81,49 @@ console.log('\n[D] Plan dont la rentree reste indeterminable');
   check("l'info-bulle reste utilisable", ev('libelleSemaine("40", undefined)') === 'Semaine 40', ev('libelleSemaine("40", undefined)'));
 }
 
+console.log('\n[E] Regroupement par mois : majorite des jours de classe');
+{
+  // Septembre 2026 va du mardi 1er au mercredi 30. La semaine du 28 septembre
+  // compte 3 jours de classe en septembre contre 2 en octobre : elle est donc
+  // de septembre, alors que son jeudi (1er octobre) dirait le contraire.
+  const sept = ev('generateSchoolYearWeeks(2026).filter(w=>w.month==="SEPTEMBRE").map(w=>w.week).join(",")');
+  check('septembre 2026 = S36 a S40', sept === '36,37,38,39,40', sept);
+
+  const oct = ev('generateSchoolYearWeeks(2026).filter(w=>w.month==="OCTOBRE").map(w=>w.week).join(",")');
+  check('octobre 2026 commence a S41', oct.indexOf('41,') === 0, oct);
+
+  // une semaine entierement dans un mois n'est jamais deplacee
+  const s39 = ev('generateSchoolYearWeeks(2026).find(w=>String(w.week)==="39").month');
+  check('semaine entierement en septembre inchangee', s39 === 'SEPTEMBRE', s39);
+
+  // le decompte porte sur lundi->vendredi, pas sur les 7 jours
+  const m1 = ev('MONTHS_FR[moisDeLaSemaine(new Date(2026,8,28))]');   // lundi 28 septembre 2026
+  const m2 = ev('MONTHS_FR[moisDeLaSemaine(new Date(2026,7,31))]');   // lundi 31 aout 2026
+  check('lundi 28 septembre 2026 -> septembre (3 jours contre 2)', m1 === 'SEPTEMBRE', m1);
+  check('lundi 31 aout 2026 -> septembre (4 jours contre 1)', m2 === 'SEPTEMBRE', m2);
+}
+
+console.log('\n[F] Recalcul des mois sur un plan saisi a la main');
+{
+  ev('globalThis.__s = normalizePlan(seedData());');
+  // les mois du plan exemple etaient approximatifs : ils doivent etre corriges
+  const mai = ev('__s.years[0].weeks.filter(w=>w.month==="MAI").map(w=>w.week).join(",")');
+  check('mai 2025 corrige en S19-S22', mai === '19,20,21,22', mai);
+
+  // chaque mois doit former un seul bloc contigu, sinon la grille afficherait
+  // deux fois le meme en-tete
+  for (const i of [0, 1]) {
+    const mois = ev('__s.years[' + i + '].weeks.map(w=>w.month)');
+    const runs = mois.filter((m, k) => k === 0 || m !== mois[k - 1]);
+    const dbl = runs.filter((m, k) => runs.indexOf(m) !== k);
+    check('annee ' + i + ' : aucun en-tete de mois duplique', dbl.length === 0, dbl.join(','));
+  }
+
+  // le recalcul ne touche jamais au contenu des cases
+  const avant = ev('SEED.years[0].rows.reduce((n,r)=>n+r.activities.length,0)');
+  const apres = ev('__s.years[0].rows.reduce((n,r)=>n+r.activities.length,0)');
+  check('les activites sont intactes', avant === apres, avant + ' -> ' + apres);
+}
+
 console.log('\n' + (failures ? failures + ' verification(s) en echec' : 'Toutes les verifications passent'));
 process.exit(failures ? 1 : 0);

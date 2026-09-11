@@ -547,7 +547,7 @@ function renderGrid(){
       }
       // la première ligne (Systèmes/Projets) reste toujours visible, même filtrée
       if(filterTeacher && ri!==0 && !(a.teachers&&a.teachers.includes(filterTeacher))) el.classList.add("dim");
-      if(editMode) attachBlockDrag(el,"act",ri,ai);
+      if(editMode){ attachBlockDrag(el,"act",ri,ai); attachBlockResize(el,"act",ri,ai); }
       grid.appendChild(el);
     });
   });
@@ -572,7 +572,7 @@ function renderGrid(){
       el.appendChild(tb);
     }
     if(filterTeacher && !(b.teachers&&b.teachers.includes(filterTeacher))) el.classList.add("dim");
-    if(editMode) attachBlockDrag(el,"band",null,bi);
+    if(editMode){ attachBlockDrag(el,"band",null,bi); attachBlockResize(el,"band",null,bi); }
     grid.appendChild(el);
   });
 }
@@ -621,6 +621,59 @@ function decalageBorne(start, end, N, souhaite){
   return Math.max(-start, Math.min(N-1-end, souhaite));
 }
 
+/* Case de fond située sous un point de l'écran.
+   Deux précautions indispensables :
+   - on parcourt TOUTE la pile d'éléments, car une bande (stage, rentrée…)
+     recouvre la grille entière et masquerait la case ;
+   - on ramène le point dans la zone réellement visible, barres de défilement
+     exclues (clientWidth/clientHeight les excluent, getBoundingClientRect non),
+     sinon glisser jusqu'au bord pour faire défiler place le curseur sur la
+     barre et plus aucune case n'est trouvée. */
+function caseSousPoint(zone, x, y){
+  const r=zone.getBoundingClientRect();
+  const px=Math.min(Math.max(x, r.left+1), r.left+zone.clientWidth-2);
+  const py=Math.min(Math.max(y, r.top+1),  r.top+zone.clientHeight-2);
+  return document.elementsFromPoint(px,py).find(t=>t.classList && t.classList.contains("bgcell")) || null;
+}
+
+/* Défilement automatique quand le curseur approche d'un bord, pendant un
+   glissement. La grille déborde de l'écran en largeur (49 semaines) comme en
+   hauteur (une vingtaine de matières) : sans cela, impossible d'atteindre la
+   partie non visible. `pos` est l'objet vivant qui porte la position du curseur. */
+function autoDefilement(zone, pos, majPosition, avecVertical){
+  let vX=0, vY=0, id=0;
+  const tick=()=>{
+    id=requestAnimationFrame(tick);
+    if(!vX && !vY) return;
+    const ax=zone.scrollLeft, ay=zone.scrollTop;
+    zone.scrollLeft+=vX; zone.scrollTop+=vY;
+    if(zone.scrollLeft!==ax || zone.scrollTop!==ay) majPosition();   // la case sous le curseur a changé
+  };
+  id=requestAnimationFrame(tick);
+  const MARGE=70, MAX=28;
+  return {
+    regler(){
+      const r=zone.getBoundingClientRect();
+      const droite=r.left+zone.clientWidth, bas=r.top+zone.clientHeight;
+      vX = pos.x < r.left+MARGE   ? -Math.min(MAX,(r.left+MARGE-pos.x)/2)
+         : pos.x > droite-MARGE   ?  Math.min(MAX,(pos.x-(droite-MARGE))/2) : 0;
+      vY = !avecVertical          ? 0
+         : pos.y < r.top+MARGE    ? -Math.min(MAX,(r.top+MARGE-pos.y)/2)
+         : pos.y > bas-MARGE      ?  Math.min(MAX,(pos.y-(bas-MARGE))/2) : 0;
+    },
+    stop(){ cancelAnimationFrame(id); }
+  };
+}
+
+/* Bornes d'un bloc dont on tire un bord. Le bord opposé ne bouge pas et le
+   bloc conserve au minimum une colonne : tirer au-delà le réduit sans jamais
+   l'inverser ni le faire sortir du calendrier. */
+function bornesRedimension(cote, wi, origStart, origEnd, N){
+  return cote==="gauche"
+    ? { start: Math.min(Math.max(0, wi), origEnd), end: origEnd }
+    : { start: origStart, end: Math.max(Math.min(N-1, wi), origStart) };
+}
+
 function attachBlockDrag(el, kind, rowIdx, index){
   el.addEventListener("mousedown", ev=>{
     if(ev.button!==0) return;
@@ -628,35 +681,20 @@ function attachBlockDrag(el, kind, rowIdx, index){
     const item = kind==="act" ? ((y.rows[rowIdx]||{}).activities||[])[index] : (y.bands||[])[index];
     if(!item) return;
 
-    const N=y.weeks.length;
+    const N=y.weeks.length, zone=$("#scroll");
     const debutX=ev.clientX, debutY=ev.clientY;
     const origStart=item.start, origEnd=item.end;
     let glisse=false, dW=0, cibleRi=rowIdx;
 
     /* Le bloc suit le curseur ; on le rend transparent aux évènements pour
-       éviter qu'il ne s'éclaire au survol pendant qu'on le déplace. */
+       qu'il ne s'éclaire pas au survol pendant qu'on le déplace. */
     el.style.pointerEvents="none";
-    /* On cherche la case de fond DANS TOUTE LA PILE d'éléments sous le curseur :
-       une bande (stage, rentrée…) recouvre la grille entière et une autre
-       activité peut aussi s'interposer. Se contenter du premier élément
-       renvoyait la bande, le déplacement était alors ignoré en silence. */
-    const caseSous=(x,yy)=>
-      document.elementsFromPoint(x,yy).find(t=>t.classList && t.classList.contains("bgcell")) || null;
-    const ancre=caseSous(debutX,debutY);
+    const ancre=caseSousPoint(zone, debutX, debutY);
     const ancreWi = ancre ? +ancre.dataset.wi : origStart;
 
-    let curX=debutX, curY=debutY;
-    const zone=$("#scroll");
-    /* Point de test ramené dans la zone réellement visible, barres de défilement
-       exclues (clientWidth/clientHeight les excluent, pas getBoundingClientRect).
-       Sans cela, glisser jusqu'au bord droit pour déclencher le défilement place
-       le curseur sur la barre : plus aucune case n'est trouvée, la vue défile
-       mais le bloc reste en arrière. */
+    const pos={x:debutX, y:debutY};
     const majPosition=()=>{
-      const r=zone.getBoundingClientRect();
-      const px=Math.min(Math.max(curX, r.left+1), r.left+zone.clientWidth-2);
-      const py=Math.min(Math.max(curY, r.top+1), r.top+zone.clientHeight-2);
-      const t=caseSous(px,py);
+      const t=caseSousPoint(zone, pos.x, pos.y);
       if(t){
         dW = decalageBorne(origStart, origEnd, N, (+t.dataset.wi) - ancreWi);
         if(kind==="act") cibleRi = +t.dataset.ri;
@@ -664,46 +702,22 @@ function attachBlockDrag(el, kind, rowIdx, index){
       el.style.gridColumn = `${2+origStart+dW} / ${2+origEnd+dW+1}`;
       if(kind==="act") el.style.gridRow = `${4+cibleRi}`;
     };
-
-    /* La grille est bien plus large que l'écran : sans ce défilement au bord,
-       il serait impossible de déplacer un bloc au-delà de la partie visible. */
-    let vX=0, vY=0;
-    const rafId2={id:0};
-    rafId2.id=requestAnimationFrame(function tick(){
-      rafId2.id=requestAnimationFrame(tick);
-      if(!vX && !vY) return;
-      const avantX=zone.scrollLeft, avantY=zone.scrollTop;
-      zone.scrollLeft += vX; zone.scrollTop += vY;
-      if(zone.scrollLeft!==avantX || zone.scrollTop!==avantY) majPosition();   // la case sous le curseur a changé
-    });
-    /* Vitesse proportionnelle à l'enfoncement dans la marge, dans les deux sens :
-       la grille déborde de l'écran en largeur (49 semaines) comme en hauteur
-       (une vingtaine de matières). */
-    const reglerVitesse=()=>{
-      const r=zone.getBoundingClientRect(), marge=70;
-      const bas=r.top+zone.clientHeight, droite=r.left+zone.clientWidth;
-      if(curX < r.left+marge)  vX = -Math.min(28, (r.left+marge-curX)/2);
-      else if(curX > droite-marge) vX = Math.min(28, (curX-(droite-marge))/2);
-      else vX = 0;
-      if(curY < r.top+marge)   vY = -Math.min(28, (r.top+marge-curY)/2);
-      else if(curY > bas-marge)    vY = Math.min(28, (curY-(bas-marge))/2);
-      else vY = 0;
-      if(kind!=="act") vY = 0;    // une bande occupe déjà toute la hauteur
-    };
+    // une bande occupe déjà toute la hauteur : pas de défilement vertical
+    const defil=autoDefilement(zone, pos, majPosition, kind==="act");
 
     const move=e=>{
       if(!glisse){
         if(Math.abs(e.clientX-debutX)<SEUIL_GLISSEMENT && Math.abs(e.clientY-debutY)<SEUIL_GLISSEMENT) return;
         glisse=true; el.classList.add("dragging"); document.body.style.cursor="grabbing";
       }
-      curX=e.clientX; curY=e.clientY;
-      majPosition(); reglerVitesse();
+      pos.x=e.clientX; pos.y=e.clientY;
+      majPosition(); defil.regler();
     };
 
     const up=()=>{
       document.removeEventListener("mousemove",move);
       document.removeEventListener("mouseup",up);
-      cancelAnimationFrame(rafId2.id);
+      defil.stop();
       el.style.pointerEvents=""; el.classList.remove("dragging"); document.body.style.cursor="";
 
       if(!glisse){                                   // simple clic : éditeur
@@ -718,14 +732,79 @@ function attachBlockDrag(el, kind, rowIdx, index){
         y.rows[cibleRi].activities.push(item);
       }
       persistDebounced(); renderGrid();
-      const oteChangeLigne = (kind==="act" && cibleRi!==rowIdx);
-      toast(oteChangeLigne ? `Déplacé vers « ${y.rows[cibleRi].label} » (S${y.weeks[item.start].week})`
-                           : `Décalé sur S${y.weeks[item.start].week}`+(item.end>item.start?`–S${y.weeks[item.end].week}`:""));
+      toast((kind==="act" && cibleRi!==rowIdx)
+        ? `Déplacé vers « ${y.rows[cibleRi].label} » (S${y.weeks[item.start].week})`
+        : `Décalé sur S${y.weeks[item.start].week}`+(item.end>item.start?`–S${y.weeks[item.end].week}`:""));
     };
 
     document.addEventListener("mousemove",move);
     document.addEventListener("mouseup",up);
     ev.preventDefault();      // évite la sélection de texte pendant le glissement
+  });
+}
+
+/* Poignées de redimensionnement sur les deux bords du bloc : tirer le bord
+   gauche change la semaine de début, le bord droit la semaine de fin. Le bord
+   opposé ne bouge pas. */
+function attachBlockResize(el, kind, rowIdx, index){
+  ["gauche","droite"].forEach(cote=>{
+    const poignee=document.createElement("div");
+    poignee.className="rsz "+cote;
+    poignee.title = cote==="gauche" ? "Tirer pour changer la semaine de début"
+                                    : "Tirer pour changer la semaine de fin";
+    poignee.addEventListener("mousedown", ev=>{
+      if(ev.button!==0) return;
+      ev.stopPropagation();     // ne pas déclencher le déplacement du bloc entier
+      ev.preventDefault();
+
+      const y=plan.years[activeYear];
+      const item = kind==="act" ? ((y.rows[rowIdx]||{}).activities||[])[index] : (y.bands||[])[index];
+      if(!item) return;
+
+      const N=y.weeks.length, zone=$("#scroll");
+      const debutX=ev.clientX;
+      const origStart=item.start, origEnd=item.end;
+      let glisse=false, bornes={start:origStart, end:origEnd};
+
+      el.style.pointerEvents="none";
+      const pos={x:debutX, y:ev.clientY};
+      const majPosition=()=>{
+        const t=caseSousPoint(zone, pos.x, pos.y);
+        if(t) bornes=bornesRedimension(cote, +t.dataset.wi, origStart, origEnd, N);
+        el.style.gridColumn = `${2+bornes.start} / ${2+bornes.end+1}`;
+      };
+      const defil=autoDefilement(zone, pos, majPosition, false);   // redimension : horizontal seul
+
+      const move=e=>{
+        if(!glisse){
+          if(Math.abs(e.clientX-debutX)<SEUIL_GLISSEMENT) return;
+          glisse=true; el.classList.add("dragging"); document.body.style.cursor="col-resize";
+        }
+        pos.x=e.clientX; pos.y=e.clientY;
+        majPosition(); defil.regler();
+      };
+      const up=()=>{
+        document.removeEventListener("mousemove",move);
+        document.removeEventListener("mouseup",up);
+        defil.stop();
+        el.style.pointerEvents=""; el.classList.remove("dragging"); document.body.style.cursor="";
+
+        if(!glisse){                                  // clic sur la poignée : éditeur
+          if(kind==="act") openActEditor(rowIdx,index); else openBandEditor(index);
+          return;
+        }
+        if(bornes.start===origStart && bornes.end===origEnd){ renderGrid(); return; }
+
+        item.start=bornes.start; item.end=bornes.end;
+        persistDebounced(); renderGrid();
+        const n=item.end-item.start+1;
+        toast(`S${y.weeks[item.start].week}`+(item.end>item.start?`–S${y.weeks[item.end].week}`:"")+` — ${n} semaine${n>1?"s":""}`);
+      };
+
+      document.addEventListener("mousemove",move);
+      document.addEventListener("mouseup",up);
+    });
+    el.appendChild(poignee);
   });
 }
 

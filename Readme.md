@@ -48,6 +48,9 @@ Plan de formation V2/
   grille, ne se décale qu'horizontalement. Le bloc garde toujours sa durée et bute sur les extrémités du
   calendrier. La vue défile toute seule quand on approche d'un bord. Un simple clic ouvre toujours l'éditeur :
   le déplacement ne démarre qu'au-delà de quelques pixels.
+- **Redimensionner** : tirer le bord gauche ou droit d'un bloc change sa semaine de début ou de fin,
+  l'autre bord ne bougeant pas. Un liseré apparaît au survol du bord. Le bloc ne peut ni s'inverser
+  ni sortir du calendrier : tiré trop loin, il se réduit à une seule semaine.
 - Gestion des lignes (ajouter, renommer, monter/descendre, supprimer, couleur par défaut).
 - **Regroupement par mois au plus juste** : une semaine à cheval sur deux mois est rangée dans celui
   où tombe la majorité de ses **jours de classe** (lundi → vendredi), et non dans celui de son jeudi

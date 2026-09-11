@@ -69,5 +69,53 @@ console.log('\n[D] Coherence sur tout un calendrier reel');
     mauvais.length === 0, mauvais.slice(0, 4).join(' | '));
 }
 
+console.log('\n[E] Redimensionnement : on tire un bord, l autre ne bouge pas');
+{
+  const b = (cote, wi, s, e, N) => ev(`JSON.stringify(bornesRedimension("${cote}",${wi},${s},${e},${N}))`);
+  const g = (wi, s, e, N) => JSON.parse(b('gauche', wi, s, e, N));
+  const dr = (wi, s, e, N) => JSON.parse(b('droite', wi, s, e, N));
+
+  let r = dr(9, 3, 5, 48);
+  check('bord droit tire vers la droite : 3-5 devient 3-9', r.start === 3 && r.end === 9, JSON.stringify(r));
+  r = dr(4, 3, 5, 48);
+  check('bord droit ramene : 3-5 devient 3-4', r.start === 3 && r.end === 4, JSON.stringify(r));
+  r = g(1, 3, 5, 48);
+  check('bord gauche tire vers la gauche : 3-5 devient 1-5', r.start === 1 && r.end === 5, JSON.stringify(r));
+  r = g(4, 3, 5, 48);
+  check('bord gauche ramene : 3-5 devient 4-5', r.start === 4 && r.end === 5, JSON.stringify(r));
+}
+
+console.log('\n[F] Redimensionnement : jamais inverse, jamais hors calendrier');
+{
+  const g = (wi, s, e, N) => JSON.parse(ev(`JSON.stringify(bornesRedimension("gauche",${wi},${s},${e},${N}))`));
+  const dr = (wi, s, e, N) => JSON.parse(ev(`JSON.stringify(bornesRedimension("droite",${wi},${s},${e},${N}))`));
+
+  let r = g(20, 3, 5, 48);
+  check('bord gauche tire au-dela du bord droit : reduit a 1 colonne', r.start === 5 && r.end === 5, JSON.stringify(r));
+  r = dr(1, 3, 5, 48);
+  check('bord droit tire avant le bord gauche : reduit a 1 colonne', r.start === 3 && r.end === 3, JSON.stringify(r));
+  r = g(-5, 3, 5, 48);
+  check('bord gauche ne sort pas par la gauche', r.start === 0, JSON.stringify(r));
+  r = dr(99, 3, 5, 48);
+  check('bord droit ne sort pas par la droite', r.end === 47, JSON.stringify(r));
+
+  // balayage complet : aucune borne aberrante quelle que soit la cible
+  const N = ev('generateSchoolYearWeeks(2026).length');
+  const mauvais = [];
+  for (let s = 0; s < N; s += 3) {
+    for (const duree of [0, 1, 5]) {
+      const e = s + duree; if (e >= N) continue;
+      for (let wi = -3; wi <= N + 2; wi += 5) {
+        for (const [cote, f] of [['gauche', g], ['droite', dr]]) {
+          const r2 = f(wi, s, e, N);
+          if (r2.start < 0 || r2.end > N - 1 || r2.start > r2.end)
+            mauvais.push(`${cote} [${s}-${e}] wi=${wi} -> ${r2.start}-${r2.end}`);
+        }
+      }
+    }
+  }
+  check('balayage complet sans borne aberrante', mauvais.length === 0, mauvais.slice(0, 3).join(' | '));
+}
+
 console.log('\n' + (failures ? failures + ' verification(s) en echec' : 'Toutes les verifications passent'));
 process.exit(failures ? 1 : 0);

@@ -211,7 +211,7 @@ kbd{background:#f1f5f9;border:1px solid var(--line);border-bottom-width:2px;bord
 .ph-sub{ font-size:12px; color:#64748b; margin-top:3px }
 @media print{
   @page{ size:A3 landscape; margin:6mm; }
-  .topbar,.subbar,.drawer,.overlay,.toast,.menu,.modal,#authScreen,.rowlab .rowmenu,.colgrip,.rowgrip{display:none!important}
+  .topbar,.subbar,.drawer,.overlay,.toast,.menu,.modal,#authScreen,.rowlab .rowmenu,.colgrip,.rowgrip,.rsz{display:none!important}
   html,body{overflow:visible!important;height:auto!important;background:#fff!important}
   #app{height:auto!important;display:block!important}
   .scroll{overflow:hidden!important;height:auto!important}
@@ -273,3 +273,14 @@ kbd{background:#f1f5f9;border:1px solid var(--line);border-bottom-width:2px;bord
 /* Bloc en cours de deplacement a la souris */
 .act.dragging,.band.dragging{opacity:.75;z-index:40;cursor:grabbing;
   outline:2px dashed var(--brand);outline-offset:1px;box-shadow:0 6px 18px rgba(15,23,42,.25)}
+
+/* Poignees de redimensionnement, sur les deux bords d'un bloc (mode edition) */
+.act .rsz,.band .rsz{position:absolute;top:0;bottom:0;width:10px;cursor:col-resize;z-index:8}
+.act .rsz.gauche,.band .rsz.gauche{left:-1px}
+.act .rsz.droite,.band .rsz.droite{right:-1px}
+/* Un lisere apparait au survol pour montrer que le bord est saisissable */
+.act .rsz::before,.band .rsz::before{content:"";position:absolute;top:3px;bottom:3px;width:3px;
+  border-radius:3px;background:var(--brand);opacity:0;transition:opacity .12s}
+.act .rsz.gauche::before,.band .rsz.gauche::before{left:1px}
+.act .rsz.droite::before,.band .rsz.droite::before{right:1px}
+.act .rsz:hover::before,.band .rsz:hover::before{opacity:1}

@@ -44,6 +44,10 @@ Plan de formation V2/
 - **Édition en place** : double-clic sur un intitulé de ligne pour le renommer ; clic sur une case (mode édition) pour modifier son contenu.
 - **Glisser-créer** : en mode édition, glisser sur des cases vides pour créer une activité sur une plage de semaines.
 - Gestion des lignes (ajouter, renommer, monter/descendre, supprimer, couleur par défaut).
+- **Dates réelles en info-bulle** : survoler un numéro de semaine affiche la période exacte
+  (« Semaine 42 — du lundi 14 octobre au dimanche 20 octobre 2024 »). La date se déduit de l'année
+  de rentrée du plan ; pour les plans anciens elle est retrouvée dans le libellé de l'année ou dans
+  le nom du plan. Si elle reste indéterminable, l'info-bulle affiche simplement le numéro.
 - **Vacances pré-remplies (La Réunion)** : l'assistant coche par défaut *Retirer les semaines de vacances*.
   Les semaines retirées proviennent du **calendrier officiel de l'Éducation nationale**
   (open data `fr-en-calendrier-scolaire`, calendrier des **élèves**), de la rentrée 2018 à la rentrée 2026.

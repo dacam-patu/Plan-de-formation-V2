@@ -3,7 +3,7 @@
    un contexte Node avec un DOM minimal et un faux Supabase (tests/harness.js). */
 const { execFileSync } = require('child_process');
 const path = require('path');
-const files = ['test-enregistrement.js', 'test-semaines.js', 'test-vacances.js'];
+const files = ['test-enregistrement.js', 'test-semaines.js', 'test-vacances.js', 'test-dates.js'];
 let ko = 0;
 for (const f of files) {
   console.log('\n=== ' + f + ' ===');

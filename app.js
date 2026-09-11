@@ -40,6 +40,13 @@ const clone = o => JSON.parse(JSON.stringify(o));
 /* Plan d'exemple, fourni par seed.js (window.SEED) : toujours renvoyé sous forme de copie,
    pour qu'une modification du plan restauré ne contamine pas le modèle. */
 function seedData(){ if(!window.SEED) throw new Error("seed.js n'est pas chargé"); return clone(window.SEED); }
+/* Nom du plan d'exemple, déduit de SON PROPRE titre : les années affichées
+   doivent correspondre au calendrier réellement contenu dans les données,
+   sinon les dates en info-bulle contrediraient le nom du plan. */
+function nomDuSeed(){
+  const m=/(20\d{2})\s*[-–—]\s*(20\d{2})/.exec((window.SEED&&window.SEED.title)||"");
+  return m ? "BTS Électrotechnique "+m[1]+"-"+m[2] : "BTS Électrotechnique (exemple)";
+}
 
 /* ---------- State ---------- */
 let DB = null;          // {order:[ids], plans:{id:plan}, currentId}
@@ -93,7 +100,7 @@ async function cloudLoad(){
   });
   if(!DB.order.length){   // premier usage : on crée le plan exemple
     const seed=normalizePlan(seedData());
-    seed.name="BTS Électrotechnique 2025-2027";
+    seed.name=nomDuSeed();
     const id=createLocalPlan(seed); await savePlanCloud(id);
   }
   DB.currentId=(pref.currentId&&DB.plans[pref.currentId])?pref.currentId:DB.order[0];
@@ -259,7 +266,9 @@ function normalizePlan(p){
   p.colWidth = p.colWidth || 48;                   // largeur d'une colonne semaine (px)
   p.teachers = Array.isArray(p.teachers) ? p.teachers : [];
   p.teachers.forEach((t,i)=>{ t.id=t.id||uid(); t.color=t.color||TEACHER_COLORS[i%TEACHER_COLORS.length]; });
-  p.years.forEach(y=>{
+  p.years.forEach((y,yi)=>{
+    // année de rentrée : sert aux dates réelles et au retrait des vacances
+    if(!y.startYear){ const sy=inferStartYear(p,y,yi); if(sy) y.startYear=sy; }
     y.rows.forEach((r,ri)=>{
       r.id = r.id || uid();
       r.color = r.color || PALETTE[ri % PALETTE.length];
@@ -397,7 +406,7 @@ function renderEmptyState(){
 }
 function restoreSeed(){
   const seed=normalizePlan(seedData());
-  seed.name="BTS Électrotechnique 2025-2027";
+  seed.name=nomDuSeed();
   const id=createLocalPlan(seed); switchPlan(id); persist(); toast("Plan d'origine restauré");
 }
 
@@ -453,11 +462,13 @@ function renderGrid(){
     grid.appendChild(el);
   });
   // week header (with column-resize grip on the right edge)
+  const dates=weekDatesFor(y, y.startYear);
   y.weeks.forEach((w,wi)=>{
     const el=document.createElement("div");
     el.className="hd week";
     el.style.gridColumn = `${2+wi}`;
     el.textContent = w.week;
+    el.title = libelleSemaine(w.week, dates.get(w));   // info-bulle : dates réelles
     const grip=document.createElement("div");
     grip.className="colgrip"; grip.title="Glisser pour régler CETTE colonne (double-clic = largeur par défaut)";
     grip.addEventListener("mousedown",e=>startColResize(e,wi));
@@ -1299,9 +1310,45 @@ function generateSchoolYearWeeks(sy){
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+7)){
     const thu=new Date(d); thu.setDate(thu.getDate()+3);  // jeudi (mois représentatif)
     const m=thu.getMonth();
-    weeks.push({ week:String(isoWeekNum(d)), month:MONTHS_FR[m], semester:(m>=1&&m<=6)?2:1 });
+    // d = date du lundi, conservée pour les info-bulles et le repérage réel
+    weeks.push({ week:String(isoWeekNum(d)), month:MONTHS_FR[m], semester:(m>=1&&m<=6)?2:1, d:ymd(d) });
   }
   return weeks;
+}
+const ymd=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+
+/* =========================================================================
+   DATES RÉELLES DES COLONNES
+   -------------------------------------------------------------------------
+   Les colonnes ne portent qu'un numéro de semaine ; la date se déduit de
+   l'année de rentrée. Les plans récents la connaissent (y.startYear) et les
+   semaines générées portent désormais leur lundi. Pour les plans plus
+   anciens, on la retrouve dans le libellé de l'année (« 2ᵉ année · 2026-2027 »)
+   ou, à défaut, dans le nom du plan (« BTS … 2024-2026 ») décalé de l'index.
+   ========================================================================= */
+function anneeDansTexte(t){ const m=/(20\d{2})\s*[-–—]\s*20\d{2}/.exec(String(t||"")); return m?+m[1]:0; }
+function inferStartYear(p, y, idx){
+  return y.startYear || anneeDansTexte(y.label) || (anneeDansTexte(p&&p.name) ? anneeDansTexte(p.name)+idx : 0) || 0;
+}
+/* Map : objet semaine -> date ISO du lundi (ou absent si indéterminable). */
+function weekDatesFor(y, sy){
+  const m=new Map();
+  y.weeks.forEach(w=>{ if(w.d) m.set(w,w.d); });
+  if(m.size===y.weeks.length) return m;
+  if(!sy) return m;
+  const parNum=new Map(generateSchoolYearWeeks(sy).map(x=>[String(x.week), x.d]));
+  y.weeks.forEach(w=>{ if(!m.has(w) && parNum.has(String(w.week))) m.set(w, parNum.get(String(w.week))); });
+  return m;
+}
+/* « Semaine 42 — du lundi 12 au dimanche 18 octobre 2026 » */
+function libelleSemaine(numero, iso){
+  if(!iso) return "Semaine "+numero;
+  const a=new Date(iso+"T00:00:00"); if(isNaN(a)) return "Semaine "+numero;
+  const b=new Date(a); b.setDate(b.getDate()+6);
+  const jour=(d,annee)=>d.toLocaleDateString("fr-FR",
+    Object.assign({weekday:"long",day:"numeric",month:"long"}, annee?{year:"numeric"}:{}));
+  const meme=a.getFullYear()===b.getFullYear();
+  return "Semaine "+numero+" — du "+jour(a,!meme)+" au "+jour(b,true);
 }
 /* Libellés de lignes (matières) du modèle BTS, par année */
 function templateRows(yearIdx){
@@ -1358,6 +1405,7 @@ function openWeekManager(){
   if(!canEditCurrent()){ toast("Lecture seule : les semaines ne peuvent pas être modifiées."); return; }
   const y=plan.years[activeYear];
   const full=fullCalendarFor(y);
+  const dates=weekDatesFor(y, y.startYear);   // dates réelles pour les info-bulles
 
   /* Liste de travail : chaque entrée = une semaine possible de l'année.
      `week` est l'objet existant (à conserver tel quel) ou null si la semaine
@@ -1368,13 +1416,13 @@ function openWeekManager(){
     slots=full.map(fw=>{
       const bucket=byNum.get(String(fw.week));
       const existing=bucket&&bucket.length?bucket.shift():null;
-      return {num:String(fw.week), month:fw.month, semester:fw.semester, week:existing, on:!!existing};
+      return {num:String(fw.week), month:fw.month, semester:fw.semester, d:fw.d, week:existing, on:!!existing};
     });
     /* Semaines présentes dans le plan mais absentes du calendrier théorique
        (plans importés, retouches manuelles) : on les garde telles quelles. */
-    y.weeks.forEach(w=>{ if(!slots.some(s=>s.week===w)) slots.push({num:String(w.week),month:w.month,semester:w.semester,week:w,on:true}); });
+    y.weeks.forEach(w=>{ if(!slots.some(s=>s.week===w)) slots.push({num:String(w.week),month:w.month,semester:w.semester,d:w.d,week:w,on:true}); });
   } else {
-    slots=y.weeks.map(w=>({num:String(w.week), month:w.month, semester:w.semester, week:w, on:true}));
+    slots=y.weeks.map(w=>({num:String(w.week), month:w.month, semester:w.semester, d:w.d, week:w, on:true}));
   }
 
   openModal("📅 Semaines de « "+y.label+" »", (body,foot,close)=>{
@@ -1453,8 +1501,10 @@ function openWeekManager(){
           b.textContent="S"+s.num;
           b.style.cssText="min-width:52px;padding:5px 8px";
           b.className=s.on?"primary":"";
-          b.title=s.on ? "Semaine travaillée — cliquer pour la retirer"
-                       : (s.week ? "Retirée" : "Absente du tableau — cliquer pour l'ajouter");
+          const quand=libelleSemaine(s.num, s.week ? dates.get(s.week) : s.d);
+          b.title=quand+"\n"+(s.on ? "Semaine travaillée — cliquer pour la retirer"
+                                   : (s.week ? "Retirée — cliquer pour la remettre"
+                                             : "Absente du tableau — cliquer pour l'ajouter"));
           b.onclick=()=>{ s.on=!s.on; b.className=s.on?"primary":""; refresh(); };
           chips.appendChild(b);
         }
@@ -1971,9 +2021,9 @@ function wire(){
   });
 }
 function resetSeed(){
-  if(!confirm("Recréer le plan « BTS Électrotechnique 2025-2027 » d'origine ? (Vos autres plans sont conservés.)")) return;
+  if(!confirm("Recréer le plan « "+nomDuSeed()+" » d'origine ? (Vos autres plans sont conservés.)")) return;
   const seed=normalizePlan(seedData());
-  seed.name="BTS Électrotechnique 2025-2027 (origine)";
+  seed.name=nomDuSeed()+" (origine)";
   const id=createLocalPlan(seed); switchPlan(id); persist(); toast("Plan d'origine recréé");
 }
 

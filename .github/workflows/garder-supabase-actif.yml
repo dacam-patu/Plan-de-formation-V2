@@ -1,0 +1,108 @@
+# ============================================================================
+#  Empêche la mise en pause du projet Supabase (plan gratuit)
+#  ---------------------------------------------------------------------------
+#  Supabase suspend un projet gratuit après 7 jours SANS AUCUNE REQUÊTE, et
+#  démonte alors l'instance : le domaine ne répond plus du tout. Ce petit
+#  travail programmé interroge la base tous les 2 jours, ce qui suffit à la
+#  considérer active. Il tourne chez GitHub : aucun ordinateur à laisser allumé.
+#
+#  Aucune configuration : l'adresse et la clé publique sont lues directement
+#  dans index.html, elles restent donc automatiquement synchronisées.
+#
+#  Si la base ne répond pas, le travail échoue volontairement : GitHub vous
+#  envoie un e-mail. Vous êtes prévenu AVANT d'avoir besoin de l'application.
+# ============================================================================
+name: Garder Supabase actif
+
+on:
+  schedule:
+    - cron: '23 5 */2 * *'      # tous les 2 jours vers 05h23 UTC
+  workflow_dispatch:             # + bouton « Run workflow » pour tester à la main
+  push:
+    paths:                       # auto-test à chaque modification de CE fichier
+      - '.github/workflows/garder-supabase-actif.yml'
+
+permissions:
+  contents: write                # pour le marqueur mensuel (voir plus bas)
+
+concurrency:
+  group: garder-supabase-actif
+  cancel-in-progress: false
+
+jobs:
+  visite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lire la configuration dans index.html
+        id: conf
+        run: |
+          set -euo pipefail
+          URL=$(sed -n 's/.*SB_URL[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' index.html | head -1)
+          KEY=$(sed -n 's/.*SB_KEY[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' index.html | head -1)
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::error::SB_URL ou SB_KEY introuvable dans index.html"
+            exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$KEY"
+          echo "key=$KEY"  >> "$GITHUB_OUTPUT"
+          echo "Projet ciblé : $URL"
+
+      - name: Interroger la base
+        id: ping
+        env:
+          URL: ${{ steps.conf.outputs.url }}
+          KEY: ${{ steps.conf.outputs.key }}
+        run: |
+          set -uo pipefail
+          # Une vraie lecture en base (pas un simple ping réseau) : c'est ce qui
+          # compte comme activité. On retombe sur la racine PostgREST si la
+          # table app_settings n'existe pas encore.
+          essai() {
+            curl -s -o /dev/null -w '%{http_code}' --max-time 25 \
+                 -H "apikey: $KEY" -H "Authorization: Bearer $KEY" "$1"
+          }
+          for n in 1 2 3; do
+            code=$(essai "$URL/rest/v1/app_settings?select=id&limit=1")
+            [ "$code" = "404" ] && code=$(essai "$URL/rest/v1/")
+            echo "Tentative $n : HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "ok=1" >> "$GITHUB_OUTPUT"
+              echo "✅ Base réveillée et interrogée avec succès (HTTP 200)." >> "$GITHUB_STEP_SUMMARY"
+              echo "Visite du $(date -u '+%d/%m/%Y à %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            [ "$n" -lt 3 ] && sleep 30
+          done
+          {
+            echo "## ❌ Le projet Supabase ne répond pas"
+            echo ""
+            echo "Dernier code HTTP : \`$code\` (000 = domaine injoignable, typique d'un projet **mis en pause**)."
+            echo ""
+            echo "**À faire :** ouvrir <https://supabase.com/dashboard>, puis cliquer **Restore project**."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Supabase injoignable (HTTP $code) — le projet est probablement en pause."
+          exit 1
+
+      - name: Marqueur mensuel (empêche GitHub de désactiver la programmation)
+        if: steps.ping.outputs.ok == '1'
+        run: |
+          set -euo pipefail
+          # GitHub désactive les tâches programmées après 60 jours sans activité
+          # sur le dépôt. Ce fichier ne change qu'une fois par mois : il y a donc
+          # au plus un commit par mois, et la programmation ne s'éteint jamais.
+          mkdir -p .github
+          date -u '+%Y-%m' > .github/derniere-visite.txt
+          # git status (et non git diff) : au tout premier passage le fichier
+          # n'est pas encore suivi, et git diff ne le verrait pas.
+          if [ -z "$(git status --porcelain -- .github/derniere-visite.txt)" ]; then
+            echo "Marqueur déjà à jour pour ce mois-ci, rien à committer."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/derniere-visite.txt
+          git commit -m "chore: marqueur de visite Supabase ($(date -u '+%Y-%m'))"
+          git push origin HEAD:${{ github.ref_name }}

@@ -44,7 +44,14 @@ Plan de formation V2/
 - **Édition en place** : double-clic sur un intitulé de ligne pour le renommer ; clic sur une case (mode édition) pour modifier son contenu.
 - **Glisser-créer** : en mode édition, glisser sur des cases vides pour créer une activité sur une plage de semaines.
 - Gestion des lignes (ajouter, renommer, monter/descendre, supprimer, couleur par défaut).
-- **Gestion des semaines** (⋯ → *Semaines de l'année*) : retirer les semaines non travaillées (vacances, examens) et les remettre. Les activités sont recalées automatiquement ; l'appli annonce à l'avance combien d'éléments perdraient toutes leurs semaines.
+- **Vacances pré-remplies (La Réunion)** : l'assistant coche par défaut *Retirer les semaines de vacances*.
+  Les semaines retirées proviennent du **calendrier officiel de l'Éducation nationale**
+  (open data `fr-en-calendrier-scolaire`, calendrier des **élèves**), de la rentrée 2018 à la rentrée 2026.
+  Au-delà, le calendrier n'étant pas encore publié, l'assistant le signale et conserve toutes les semaines.
+- **Gestion des semaines** (⋯ → *Semaines de l'année*) : retirer les semaines non travaillées et les remettre.
+  Un bouton **🏖️ Décocher les vacances (La Réunion)** fait le travail en un clic sur un plan existant.
+  Les activités sont recalées automatiquement, et l'appli annonce à l'avance combien d'éléments perdraient
+  toutes leurs semaines. Les semaines *à cheval* sur des vacances sont signalées mais jamais retirées d'office.
 
 ### Mise en forme
 - **Couleurs** : 54 teintes prédéfinies + sélecteur de couleur libre ; contraste automatique du texte (blanc/foncé).

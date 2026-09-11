@@ -1241,6 +1241,45 @@ function switchPlan(id){
   DB.currentId=id; plan=DB.plans[id]; activeYear=0; filterTeacher=""; savePref(); render();
 }
 const MONTHS_FR=["JANVIER","FÉVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOÛT","SEPTEMBRE","OCTOBRE","NOVEMBRE","DÉCEMBRE"];
+
+/* =========================================================================
+   VACANCES SCOLAIRES — académie de La Réunion
+   -------------------------------------------------------------------------
+   Source : data.education.gouv.fr, jeu de données « fr-en-calendrier-scolaire »,
+   calendrier des ÉLÈVES, relevé le 11/09/2026.
+   Clé = année de rentrée (2026 = année scolaire 2026-2027).
+     off  : semaines ISO dont les 5 jours ouvrés sont en vacances → proposées
+            au retrait automatique.
+     part : semaines dont la majorité des jours ouvrés sont en vacances, mais
+            pas tous → seulement SIGNALÉES, jamais retirées d'office : selon
+            l'établissement ces demi-semaines sont travaillées ou non.
+   Le calendrier officiel n'est publié que 2 à 3 ans à l'avance ; au-delà,
+   l'assistant le dit et laisse le calendrier complet.
+   ========================================================================= */
+const VACANCES_REUNION={
+  2018:{off:[42,43,52,1,2,3,4,11,12,20,28], part:[33,19]},
+  2019:{off:[42,43,52,1,2,3,4,11,12,19,28,29], part:[33,20]},
+  2020:{off:[33,42,43,52,53,1,2,3,10,11,19,28], part:[18,27]},
+  2021:{off:[32,41,42,51,52,1,2,3,11,12,20,21,28], part:[]},
+  2022:{off:[41,42,51,52,1,2,3,11,12,20,21,28], part:[]},
+  2023:{off:[42,43,52,1,2,3,10,11,19,20,28], part:[33,51]},
+  2024:{off:[33,42,43,52,1,2,3,10,11,19,20,28], part:[]},
+  2025:{off:[33,42,43,52,1,2,3,10,11,19,20,28,29], part:[]},
+  2026:{off:[33,42,43,52,53,1,2,3,4,12,19,27,28], part:[11,18]}
+};
+function vacancesDe(sy){ return VACANCES_REUNION[sy]||null; }
+
+/* Retire d'une année les semaines de vacances connues. Passe par remapWeeks
+   pour que les activités déjà posées soient recalées au lieu d'être décalées. */
+function retirerVacances(y, sy){
+  const v=vacancesDe(sy); if(!v) return 0;
+  const off=new Set(v.off.map(String));
+  const garde=y.weeks.filter(w=>!off.has(String(w.week)));
+  if(garde.length===y.weeks.length || !garde.length) return 0;
+  const retirees=y.weeks.length-garde.length;
+  remapWeeks(y, garde);
+  return retirees;
+}
 /* Numéro de semaine ISO 8601 d'une date */
 function isoWeekNum(d){
   const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
@@ -1350,7 +1389,25 @@ function openWeekManager(){
     const tools=document.createElement("div"); tools.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0";
     const bAll=document.createElement("button"); bAll.textContent="Tout cocher";
     const bNone=document.createElement("button"); bNone.textContent="Tout décocher";
-    tools.append(bAll,bNone); body.appendChild(tools);
+    tools.append(bAll,bNone);
+    /* Raccourci « vacances » : disponible dès que l'année de rentrée est connue
+       et figure au calendrier officiel relevé. */
+    const vacs=vacancesDe(y.startYear);
+    if(vacs){
+      const bVac=document.createElement("button"); bVac.className="primary";
+      bVac.textContent="🏖️ Décocher les vacances (La Réunion)";
+      bVac.title="Calendrier officiel de l'Éducation nationale pour "+y.startYear+"-"+(y.startYear+1);
+      bVac.onclick=()=>{
+        const off=new Set(vacs.off.map(String));
+        slots.forEach(s=>{ if(off.has(s.num)) s.on=false; });
+        draw(); refresh();
+        toast((vacs.part&&vacs.part.length)
+          ? "Vacances décochées. Semaines à cheval laissées cochées : "+vacs.part.map(w=>"S"+w).join(", ")
+          : "Semaines de vacances décochées");
+      };
+      tools.appendChild(bVac);
+    }
+    body.appendChild(tools);
 
     const count=document.createElement("div"); count.className="hint"; count.style.margin="0 0 10px";
     const warn=document.createElement("div"); warn.className="auth-msg"; warn.style.display="none";
@@ -1438,6 +1495,15 @@ function newBlankPlan(){
         <select id="npDur"><option value="2" selected>2 ans (BTS — 1ʳᵉ + 2ᵉ année)</option><option value="1">1 an</option></select>
       </div>
       <div class="field">
+        <label>Vacances scolaires</label>
+        <label for="npVac" style="display:flex;align-items:flex-start;gap:8px;font-weight:500;cursor:pointer">
+          <input type="checkbox" id="npVac" checked style="width:auto;flex:0 0 auto;margin-top:3px">
+          <span>Retirer les semaines de vacances de <b>La Réunion</b><br>
+            <span class="hint">Calendrier officiel de l'Éducation nationale. Ajustable ensuite par ⋯ → Semaines de l'année.</span>
+          </span>
+        </label>
+      </div>
+      <div class="field">
         <label>Base de départ</label>
         <select id="npBase"></select>
       </div>
@@ -1447,7 +1513,8 @@ function newBlankPlan(){
       </div>
       <div class="hint" id="npPreview" style="background:var(--brand-soft);padding:10px 12px;border-radius:8px"></div>`;
     const ySel=body.querySelector("#npYear"), dur=body.querySelector("#npDur"),
-          baseSel=body.querySelector("#npBase"), nm=body.querySelector("#npName"), prev=body.querySelector("#npPreview");
+          baseSel=body.querySelector("#npBase"), nm=body.querySelector("#npName"), prev=body.querySelector("#npPreview"),
+          vac=body.querySelector("#npVac");
     for(let yr=now.getFullYear()-2; yr<=now.getFullYear()+8; yr++){
       const o=document.createElement("option"); o.value=yr; o.textContent=`Rentrée ${yr} (${yr}-${yr+1})`;
       if(yr===startYear)o.selected=true; ySel.appendChild(o);
@@ -1459,13 +1526,28 @@ function newBlankPlan(){
     const refresh=()=>{
       const sy=+ySel.value, n=+dur.value, base=baseSel.value;
       nm.value = nm.dataset.touched ? nm.value : `BTS Électrotechnique ${sy}-${sy+n}`;
-      const lines=[]; for(let i=0;i<n;i++){ const s=sy+i; lines.push(`${i===0?"1ʳᵉ":"2ᵉ"} année : <b>${s}-${s+1}</b> — ${generateSchoolYearWeeks(s).length} semaines réelles`); }
+      const otez=vac.checked;
+      const lines=[], manquantes=[], partielles=new Set();
+      for(let i=0;i<n;i++){
+        const s=sy+i, tot=generateSchoolYearWeeks(s).length, v=vacancesDe(s);
+        let txt=`${i===0?"1ʳᵉ":"2ᵉ"} année : <b>${s}-${s+1}</b> — ${tot} semaines réelles`;
+        if(otez && v){
+          const enleve=generateSchoolYearWeeks(s).filter(w=>v.off.includes(+w.week)).length;
+          txt+=` → <b>${tot-enleve}</b> après retrait de ${enleve} semaines de vacances`;
+          (v.part||[]).forEach(w=>partielles.add(w));
+        } else if(otez && !v){
+          manquantes.push(`${s}-${s+1}`);
+        }
+        lines.push(txt);
+      }
       let note="";
-      if(base!=="__tpl__" && base!=="__empty__" && DB.plans[base]) note=`<br><br>📋 Le contenu (activités, bandes, profs) de « ${esc(DB.plans[base].name)} » sera repris et replacé sur le nouveau calendrier.`;
+      if(manquantes.length) note+=`<br><br>⚠️ Calendrier officiel pas encore publié pour ${manquantes.join(" et ")} : ces années gardent toutes leurs semaines. Vous les ajusterez par ⋯ → Semaines de l'année.`;
+      if(partielles.size) note+=`<br><br>ℹ️ Semaines à cheval sur des vacances, <b>conservées</b> (à vous de voir) : ${[...partielles].sort((a,b)=>a-b).map(w=>"S"+w).join(", ")}.`;
+      if(base!=="__tpl__" && base!=="__empty__" && DB.plans[base]) note+=`<br><br>📋 Le contenu (activités, bandes, profs) de « ${esc(DB.plans[base].name)} » sera repris et replacé sur le nouveau calendrier.`;
       prev.innerHTML="📅 "+lines.join("<br>")+note;
     };
     nm.oninput=()=>{ nm.dataset.touched="1"; };
-    ySel.onchange=refresh; dur.onchange=refresh; baseSel.onchange=refresh; refresh();
+    ySel.onchange=refresh; dur.onchange=refresh; baseSel.onchange=refresh; vac.onchange=refresh; refresh();
     const create=document.createElement("button"); create.className="primary"; create.textContent="Créer le plan";
     create.onclick=()=>{
       const sy=+ySel.value, n=+dur.value, base=baseSel.value;
@@ -1493,9 +1575,15 @@ function newBlankPlan(){
             bands:[] });
         }
       }
+      /* Retrait des vacances APRÈS la pose des activités : remapWeeks recale
+         les blocs au lieu de les décaler d'un cran par colonne supprimée. */
+      let otees=0;
+      if(vac.checked) p.years.forEach(y=>{ otees+=retirerVacances(y, y.startYear); });
+
       const np=normalizePlan(p);
       const id=createLocalPlan(np); close(); switchPlan(id); persist();
-      toast(`Plan « ${np.name} » créé avec le calendrier réel`);
+      toast(otees ? `Plan « ${np.name} » créé — ${otees} semaines de vacances retirées`
+                  : `Plan « ${np.name} » créé avec le calendrier réel`);
     };
     const cancel=document.createElement("button"); cancel.textContent="Annuler"; cancel.onclick=close;
     foot.append(cancel,create);

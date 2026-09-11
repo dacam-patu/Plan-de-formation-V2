@@ -43,6 +43,11 @@ Plan de formation V2/
 - **Repartir d'un plan existant** : réutilise le contenu d'un ancien plan (activités, bandes, profs) en le replaçant sur le calendrier de la nouvelle rentrée.
 - **Édition en place** : double-clic sur un intitulé de ligne pour le renommer ; clic sur une case (mode édition) pour modifier son contenu.
 - **Glisser-créer** : en mode édition, glisser sur des cases vides pour créer une activité sur une plage de semaines.
+- **Glisser-déplacer** : en mode édition, attraper un bloc à la souris pour le décaler de semaine en semaine.
+  Une activité change aussi de ligne si on la déplace verticalement ; une bande, qui traverse toute la
+  grille, ne se décale qu'horizontalement. Le bloc garde toujours sa durée et bute sur les extrémités du
+  calendrier. La vue défile toute seule quand on approche d'un bord. Un simple clic ouvre toujours l'éditeur :
+  le déplacement ne démarre qu'au-delà de quelques pixels.
 - Gestion des lignes (ajouter, renommer, monter/descendre, supprimer, couleur par défaut).
 - **Regroupement par mois au plus juste** : une semaine à cheval sur deux mois est rangée dans celui
   où tombe la majorité de ses **jours de classe** (lundi → vendredi), et non dans celui de son jeudi

@@ -547,7 +547,7 @@ function renderGrid(){
       }
       // la première ligne (Systèmes/Projets) reste toujours visible, même filtrée
       if(filterTeacher && ri!==0 && !(a.teachers&&a.teachers.includes(filterTeacher))) el.classList.add("dim");
-      if(editMode) el.onclick=e=>{e.stopPropagation();openActEditor(ri,ai);};
+      if(editMode) attachBlockDrag(el,"act",ri,ai);
       grid.appendChild(el);
     });
   });
@@ -572,7 +572,7 @@ function renderGrid(){
       el.appendChild(tb);
     }
     if(filterTeacher && !(b.teachers&&b.teachers.includes(filterTeacher))) el.classList.add("dim");
-    if(editMode) el.onclick=e=>{e.stopPropagation();openBandEditor(bi);};
+    if(editMode) attachBlockDrag(el,"band",null,bi);
     grid.appendChild(el);
   });
 }
@@ -599,6 +599,134 @@ function textOn(hex){
   const n=parseInt(m[1],16), r=(n>>16)&255, g=(n>>8)&255, b=n&255;
   const lum=(0.299*r+0.587*g+0.114*b)/255;
   return lum>0.6 ? "#0f172a" : "#ffffff";
+}
+
+/* =========================================================================
+   DÉPLACEMENT D'UN BLOC À LA SOURIS
+   -------------------------------------------------------------------------
+   Glisser une activité la décale de semaine en semaine, et la fait changer de
+   ligne si on la déplace verticalement. Les bandes traversant toute la grille,
+   elles ne se décalent qu'horizontalement.
+
+   Un simple clic doit continuer d'ouvrir l'éditeur : le glissement ne démarre
+   qu'au-delà de quelques pixels, pour qu'un clic un peu tremblant ne devienne
+   pas un déplacement involontaire.
+   ========================================================================= */
+const SEUIL_GLISSEMENT = 4;   // px avant de considérer que l'on déplace
+
+/* Décalage réellement applicable à un bloc [start,end] dans un calendrier de N
+   colonnes : le bloc garde toujours sa durée, il bute donc sur les extrémités
+   au lieu d'être tronqué ou de sortir du tableau. */
+function decalageBorne(start, end, N, souhaite){
+  return Math.max(-start, Math.min(N-1-end, souhaite));
+}
+
+function attachBlockDrag(el, kind, rowIdx, index){
+  el.addEventListener("mousedown", ev=>{
+    if(ev.button!==0) return;
+    const y=plan.years[activeYear];
+    const item = kind==="act" ? ((y.rows[rowIdx]||{}).activities||[])[index] : (y.bands||[])[index];
+    if(!item) return;
+
+    const N=y.weeks.length;
+    const debutX=ev.clientX, debutY=ev.clientY;
+    const origStart=item.start, origEnd=item.end;
+    let glisse=false, dW=0, cibleRi=rowIdx;
+
+    /* Le bloc suit le curseur ; on le rend transparent aux évènements pour
+       éviter qu'il ne s'éclaire au survol pendant qu'on le déplace. */
+    el.style.pointerEvents="none";
+    /* On cherche la case de fond DANS TOUTE LA PILE d'éléments sous le curseur :
+       une bande (stage, rentrée…) recouvre la grille entière et une autre
+       activité peut aussi s'interposer. Se contenter du premier élément
+       renvoyait la bande, le déplacement était alors ignoré en silence. */
+    const caseSous=(x,yy)=>
+      document.elementsFromPoint(x,yy).find(t=>t.classList && t.classList.contains("bgcell")) || null;
+    const ancre=caseSous(debutX,debutY);
+    const ancreWi = ancre ? +ancre.dataset.wi : origStart;
+
+    let curX=debutX, curY=debutY;
+    const zone=$("#scroll");
+    /* Point de test ramené dans la zone réellement visible, barres de défilement
+       exclues (clientWidth/clientHeight les excluent, pas getBoundingClientRect).
+       Sans cela, glisser jusqu'au bord droit pour déclencher le défilement place
+       le curseur sur la barre : plus aucune case n'est trouvée, la vue défile
+       mais le bloc reste en arrière. */
+    const majPosition=()=>{
+      const r=zone.getBoundingClientRect();
+      const px=Math.min(Math.max(curX, r.left+1), r.left+zone.clientWidth-2);
+      const py=Math.min(Math.max(curY, r.top+1), r.top+zone.clientHeight-2);
+      const t=caseSous(px,py);
+      if(t){
+        dW = decalageBorne(origStart, origEnd, N, (+t.dataset.wi) - ancreWi);
+        if(kind==="act") cibleRi = +t.dataset.ri;
+      }
+      el.style.gridColumn = `${2+origStart+dW} / ${2+origEnd+dW+1}`;
+      if(kind==="act") el.style.gridRow = `${4+cibleRi}`;
+    };
+
+    /* La grille est bien plus large que l'écran : sans ce défilement au bord,
+       il serait impossible de déplacer un bloc au-delà de la partie visible. */
+    let vX=0, vY=0;
+    const rafId2={id:0};
+    rafId2.id=requestAnimationFrame(function tick(){
+      rafId2.id=requestAnimationFrame(tick);
+      if(!vX && !vY) return;
+      const avantX=zone.scrollLeft, avantY=zone.scrollTop;
+      zone.scrollLeft += vX; zone.scrollTop += vY;
+      if(zone.scrollLeft!==avantX || zone.scrollTop!==avantY) majPosition();   // la case sous le curseur a changé
+    });
+    /* Vitesse proportionnelle à l'enfoncement dans la marge, dans les deux sens :
+       la grille déborde de l'écran en largeur (49 semaines) comme en hauteur
+       (une vingtaine de matières). */
+    const reglerVitesse=()=>{
+      const r=zone.getBoundingClientRect(), marge=70;
+      const bas=r.top+zone.clientHeight, droite=r.left+zone.clientWidth;
+      if(curX < r.left+marge)  vX = -Math.min(28, (r.left+marge-curX)/2);
+      else if(curX > droite-marge) vX = Math.min(28, (curX-(droite-marge))/2);
+      else vX = 0;
+      if(curY < r.top+marge)   vY = -Math.min(28, (r.top+marge-curY)/2);
+      else if(curY > bas-marge)    vY = Math.min(28, (curY-(bas-marge))/2);
+      else vY = 0;
+      if(kind!=="act") vY = 0;    // une bande occupe déjà toute la hauteur
+    };
+
+    const move=e=>{
+      if(!glisse){
+        if(Math.abs(e.clientX-debutX)<SEUIL_GLISSEMENT && Math.abs(e.clientY-debutY)<SEUIL_GLISSEMENT) return;
+        glisse=true; el.classList.add("dragging"); document.body.style.cursor="grabbing";
+      }
+      curX=e.clientX; curY=e.clientY;
+      majPosition(); reglerVitesse();
+    };
+
+    const up=()=>{
+      document.removeEventListener("mousemove",move);
+      document.removeEventListener("mouseup",up);
+      cancelAnimationFrame(rafId2.id);
+      el.style.pointerEvents=""; el.classList.remove("dragging"); document.body.style.cursor="";
+
+      if(!glisse){                                   // simple clic : éditeur
+        if(kind==="act") openActEditor(rowIdx,index); else openBandEditor(index);
+        return;
+      }
+      if(dW===0 && cibleRi===rowIdx){ renderGrid(); return; }   // reposé au même endroit
+
+      item.start=origStart+dW; item.end=origEnd+dW;
+      if(kind==="act" && cibleRi!==rowIdx){
+        y.rows[rowIdx].activities.splice(index,1);
+        y.rows[cibleRi].activities.push(item);
+      }
+      persistDebounced(); renderGrid();
+      const oteChangeLigne = (kind==="act" && cibleRi!==rowIdx);
+      toast(oteChangeLigne ? `Déplacé vers « ${y.rows[cibleRi].label} » (S${y.weeks[item.start].week})`
+                           : `Décalé sur S${y.weeks[item.start].week}`+(item.end>item.start?`–S${y.weeks[item.end].week}`:""));
+    };
+
+    document.addEventListener("mousemove",move);
+    document.addEventListener("mouseup",up);
+    ev.preventDefault();      // évite la sélection de texte pendant le glissement
+  });
 }
 
 /* =========================================================================

@@ -18,6 +18,7 @@ Cette V2 ajoute des **comptes**, des **rôles** et le **partage des plans** via 
 1. Dans Supabase, menu de gauche → **SQL Editor** → **New query**.
 2. Ouvrir le fichier **`supabase-setup.sql`** (dans ce dossier), **copier tout**, coller dans l'éditeur.
 3. Cliquer **RUN**. Vous devez voir *Success*.
+4. Recommencer (New query → coller → RUN) avec **`supabase-logo.sql`**, puis **`supabase-fiabilite.sql`**.
 
 ## Étape 3 — Activer la connexion par e-mail
 
@@ -48,15 +49,19 @@ Menu **Project Settings** (roue crantée) → **API** :
 
 ---
 
-## Ce que je brancherai ensuite dans l'appli (index.html V2)
+## Ce qui est branché dans l'appli
+
 - Écran de **connexion / inscription**.
 - Affichage du **compte connecté** et de son **rôle**.
-- **Chargement / enregistrement des plans dans la base** (au lieu du navigateur seul).
-- Bouton **Publier / Dépublier** un plan.
-- Gestion des **droits d'édition** (autoriser tel collègue à modifier tel plan).
-- **Panneau admin** : liste des comptes, changement de rôle.
+- **Chargement / enregistrement des plans dans la base**, avec cache de secours local
+  et refus d'écraser le travail d'un collègue.
+- **⋯ → Partage et droits** : publier un plan (lecture pour tous) et autoriser
+  nommément des collègues à le **modifier**.
+- **Panneau admin** : liste des comptes, changement de rôle, logo de l'établissement.
 
 ## Bon à savoir
-- L'appli V2 nécessitera **une connexion Internet** (elle parle à la base).
-- Pour un vrai usage partagé, il faudra **héberger `index.html`** (gratuit : GitHub Pages, Netlify…). On verra ça après le branchement — je vous guiderai.
-- Vos données actuelles (version locale) ne sont pas touchées : on pourra les **importer** dans la base via vos sauvegardes JSON.
+- L'appli nécessite **une connexion Internet** (elle parle à la base).
+- Pour un vrai usage partagé, il faut **héberger le dossier complet** (index.html,
+  app.css, app.js, seed.js, logo.png) — gratuit : GitHub Pages, Netlify…
+- Vos données locales (version V1) ne sont pas touchées : vous pouvez les
+  **importer** dans la base via vos sauvegardes JSON.
